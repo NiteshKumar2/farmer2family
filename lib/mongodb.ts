@@ -3,7 +3,9 @@ import mongoose from "mongoose";
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
-  throw new Error("Please define MONGODB_URI in your environment variables.");
+  throw new Error(
+    "Please define MONGODB_URI in your environment variables."
+  );
 }
 
 type MongooseCache = {
@@ -15,14 +17,14 @@ const globalWithMongoose = globalThis as typeof globalThis & {
   mongooseCache?: MongooseCache;
 };
 
-const cached = globalWithMongoose.mongooseCache ?? {
+const cached: MongooseCache = globalWithMongoose.mongooseCache ?? {
   conn: null,
   promise: null,
 };
 
 globalWithMongoose.mongooseCache = cached;
 
-export async function connectDB() {
+export async function connectDB(): Promise<typeof mongoose> {
   if (cached.conn) {
     return cached.conn;
   }
