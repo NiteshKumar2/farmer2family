@@ -6,28 +6,33 @@ const VisitorSchema = new Schema(
       type: String,
       required: true,
       trim: true,
+      maxlength: 100,
     },
 
     mobile: {
       type: String,
       required: true,
       trim: true,
+      maxlength: 20,
     },
 
     email: {
       type: String,
       trim: true,
       lowercase: true,
+      maxlength: 150,
     },
 
     address: {
       type: String,
       trim: true,
+      maxlength: 500,
     },
 
     purpose: {
       type: String,
       trim: true,
+      maxlength: 200,
     },
 
     visitDate: {
@@ -40,6 +45,8 @@ const VisitorSchema = new Schema(
   }
 );
 
-const Visitor = models.Visitor || model("Visitor", VisitorSchema);
+const Visitor =
+  models.Visitor ||
+  model("Visitor", VisitorSchema);
 
 export default Visitor;
