@@ -27,6 +27,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Mobile must contain exactly 10 digits
+    if (!/^\d{10}$/.test(mobile)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Mobile number must be exactly 10 digits.",
+        },
+        { status: 400 }
+      );
+    }
+
     const visitor = await Visitor.create({
       name,
       mobile,

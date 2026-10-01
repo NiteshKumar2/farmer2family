@@ -13,7 +13,7 @@ const VisitorSchema = new Schema(
       type: String,
       required: true,
       trim: true,
-      maxlength: 20,
+      match: /^\d{10}$/,
     },
 
     email: {
@@ -42,11 +42,9 @@ const VisitorSchema = new Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-const Visitor =
-  models.Visitor ||
-  model("Visitor", VisitorSchema);
+const Visitor = models.Visitor || model("Visitor", VisitorSchema);
 
 export default Visitor;

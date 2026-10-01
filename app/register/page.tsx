@@ -134,7 +134,7 @@ export default function RegisterPage() {
                     <p className="font-bold">Visit Dates</p>
 
                     <p className="mt-1 text-sm text-gray-500">
-                      15 October 2026 – 30 October 2026
+                      10 October 2026 – 30 October 2026
                     </p>
                   </div>
                 </div>
@@ -178,7 +178,7 @@ export default function RegisterPage() {
                   <p className="font-bold text-[#26351f]">Important</p>
 
                   <p className="mt-1 text-sm leading-6 text-[#4b5d43]">
-                    Please select a visit date between 15 October and 30 October
+                    Please select a visit date between 10 October and 30 October
                     2026. Registration is open from now.
                   </p>
                 </div>
@@ -240,13 +240,15 @@ export default function RegisterPage() {
                     size={18}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
                   />
-
                   <input
                     name="mobile"
                     type="tel"
-                    placeholder="Your mobile number"
+                    inputMode="numeric"
+                    pattern="[0-9]{10}"
+                    placeholder="Enter 10-digit mobile number"
                     required
-                    maxLength={20}
+                    minLength={10}
+                    maxLength={10}
                     className="w-full rounded-xl border border-gray-200 py-3.5 pl-11 pr-4 outline-none transition focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
                   />
                 </div>
@@ -333,7 +335,7 @@ export default function RegisterPage() {
                 </div>
 
                 <p className="mt-2 text-xs text-gray-500">
-                  Available dates: 15 October 2026 to 30 October 2026
+                  Available dates: 10 October 2026 to 30 October 2026
                 </p>
               </div>
 
