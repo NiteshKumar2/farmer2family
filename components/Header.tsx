@@ -1,15 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Search,
-  ShoppingCart,
-  User,
-  Heart,
-  Menu,
-  X,
-} from "lucide-react";
+import { Search, ShoppingCart, User, Heart, Menu, X } from "lucide-react";
 import { useState } from "react";
+import AuthButton from "@/components/AuthButton";
 
 const categories = [
   "Vegetables",
@@ -65,10 +59,7 @@ export default function Header() {
             <button className="hidden md:block">
               <Heart size={21} />
             </button>
-
-            <Link href="/login">
-              <User size={21} />
-            </Link>
+            <AuthButton />
 
             <Link href="/cart" className="relative">
               <ShoppingCart size={22} />
