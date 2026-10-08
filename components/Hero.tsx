@@ -36,7 +36,7 @@ export default function Hero() {
               </Link>
 
               <Link
-                href="/farmers"
+                href="/register"
                 className="rounded-full border border-[#28551f] px-8 py-3 font-bold text-[#28551f]"
               >
                 Meet Farmers

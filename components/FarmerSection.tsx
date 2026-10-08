@@ -56,7 +56,7 @@ export default function FarmerSection() {
           </div>
 
           <Link
-            href="/farmers"
+            href="/register"
             className="mt-8 inline-block rounded-full bg-[#28551f] px-7 py-3 font-bold text-white"
           >
             Meet Our Farmers →

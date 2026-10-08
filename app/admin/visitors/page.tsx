@@ -137,7 +137,7 @@ export default function AdminVisitorsPage() {
             </div>
 
             <p className="mt-4 text-3xl font-black text-[#26351f]">
-              15–30
+              10–30
             </p>
 
             <p className="text-sm text-gray-500">
