@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingCart, User, Heart, Menu, X } from "lucide-react";
+import {
+  Search,
+  ShoppingCart,
+  Heart,
+  Menu,
+  X,
+  Leaf,
+  ChevronDown,
+} from "lucide-react";
 import { useState } from "react";
 import AuthButton from "@/components/AuthButton";
 
@@ -18,66 +26,130 @@ const categories = [
 
 export default function Header() {
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [search, setSearch] = useState("");
+
+  function handleSearch(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    const query = search.trim();
+    if (!query) return;
+
+    window.location.href = `/products?search=${encodeURIComponent(query)}`;
+  }
 
   return (
     <>
-      <div className="bg-[#24451f] px-4 py-2 text-center text-sm text-white">
-        🚚 Fresh products from farmers to your family
+      {/* Announcement bar */}
+      <div className="bg-[#24451f] px-4 py-2 text-center text-xs font-medium tracking-wide text-white sm:text-sm">
+        <span className="mr-2">🚚</span>
+        Fresh from farms, delivered to your family
+        <span className="mx-2 hidden text-white/50 sm:inline">|</span>
+        <span className="hidden sm:inline">
+          Natural goodness in every bite
+        </span>
       </div>
 
-      <header className="sticky top-0 z-50 border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center gap-5 px-4 py-4">
+      <header className="sticky top-0 z-50 border-b border-gray-100 bg-white shadow-sm">
+        {/* Main header */}
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:gap-5 lg:px-6">
+          {/* Mobile menu */}
           <button
-            className="md:hidden"
-            onClick={() => setMobileMenu(!mobileMenu)}
+            type="button"
+            aria-label={mobileMenu ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenu}
+            onClick={() => setMobileMenu((open) => !open)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 text-[#24451f] transition hover:bg-[#f4f7ef] md:hidden"
           >
-            {mobileMenu ? <X /> : <Menu />}
+            {mobileMenu ? <X size={21} /> : <Menu size={21} />}
           </button>
 
+          {/* Logo */}
           <Link
             href="/"
-            className="whitespace-nowrap text-2xl font-black tracking-tight text-[#28551f]"
+            aria-label="Farmer2Family home"
+            className="flex shrink-0 items-center gap-1 text-xl font-black tracking-tight text-[#28551f] sm:text-2xl"
           >
-            Farmer
-            <span className="text-[#d7862c]">2</span>
-            Family
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eef4e8]">
+              <Leaf size={22} className="text-[#28551f]" />
+            </span>
+            <span>
+              Farmer<span className="text-[#d7862c]">2</span>Family
+            </span>
           </Link>
 
-          <div className="hidden flex-1 md:block">
-            <div className="flex items-center rounded-full border border-gray-200 bg-[#f7f8f3] px-5 py-3">
-              <Search size={20} className="mr-3 text-gray-500" />
+          {/* Desktop search */}
+          <form
+            onSubmit={handleSearch}
+            role="search"
+            className="hidden min-w-0 max-w-xl flex-1 md:block"
+          >
+            <div className="flex items-center rounded-full border border-gray-200 bg-[#f8f9f5] px-4 transition focus-within:border-[#6b8d55] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#28551f]/10">
+              <Search size={20} className="mr-3 shrink-0 text-gray-400" />
 
               <input
                 type="search"
-                placeholder="Search vegetables, rice, dal, oil..."
-                className="w-full bg-transparent outline-none"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search vegetables, fruits, rice..."
+                aria-label="Search products"
+                className="h-12 w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
               />
+
+              <button
+                type="submit"
+                className="rounded-full bg-[#28551f] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#1e4018]"
+              >
+                Search
+              </button>
             </div>
-          </div>
+          </form>
 
-          <div className="flex items-center gap-4">
-            <button className="hidden md:block">
+          {/* Header actions */}
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+            <Link
+              href="/wishlist"
+              aria-label="Wishlist"
+              className="hidden h-10 w-10 items-center justify-center rounded-full text-gray-600 transition hover:bg-[#f4f7ef] hover:text-[#28551f] sm:flex"
+            >
               <Heart size={21} />
-            </button>
-            <AuthButton />
+            </Link>
 
-            <Link href="/cart" className="relative">
+            <div className="hidden sm:block">
+              <AuthButton />
+            </div>
+
+            <Link
+              href="/cart"
+              aria-label="Shopping cart"
+              className="relative flex h-10 w-10 items-center justify-center rounded-full text-[#28551f] transition hover:bg-[#f4f7ef]"
+            >
               <ShoppingCart size={22} />
-
-              <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#d7862c] text-xs text-white">
+              <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d7862c] px-1 text-[10px] font-bold text-white">
                 0
               </span>
             </Link>
           </div>
         </div>
 
-        <nav className="hidden border-t md:block">
-          <div className="mx-auto flex max-w-7xl gap-8 overflow-x-auto px-4 py-3">
+        {/* Desktop category navigation */}
+        <nav
+          aria-label="Product categories"
+          className="hidden border-t border-gray-100 md:block"
+        >
+          <div className="mx-auto flex max-w-7xl items-center gap-7 overflow-x-auto px-6">
+            <Link
+              href="/products"
+              className="flex shrink-0 items-center gap-1 py-3 text-sm font-semibold text-[#28551f] hover:text-[#d7862c]"
+            >
+              Shop All
+              <ChevronDown size={14} />
+            </Link>
+
             {categories.map((category) => (
               <Link
                 key={category}
                 href={`/products?category=${encodeURIComponent(category)}`}
-                className="whitespace-nowrap text-sm font-medium text-gray-700 hover:text-[#28551f]"
+                className="shrink-0 border-b-2 border-transparent py-3 text-sm font-medium text-gray-600 transition hover:border-[#d7862c] hover:text-[#28551f]"
               >
                 {category}
               </Link>
@@ -85,28 +157,78 @@ export default function Header() {
           </div>
         </nav>
 
+        {/* Mobile navigation */}
         {mobileMenu && (
-          <div className="border-t bg-white px-5 py-5 md:hidden">
-            <div className="mb-5 flex items-center rounded-lg border px-4 py-3">
-              <Search size={18} className="mr-3 text-gray-500" />
+          <div className="border-t border-gray-100 bg-white px-4 py-5 shadow-lg md:hidden">
+            {/* Mobile search */}
+            <form onSubmit={handleSearch} role="search" className="mb-5">
+              <div className="flex items-center rounded-xl border border-gray-200 bg-[#f8f9f5] px-3 focus-within:border-[#6b8d55]">
+                <Search size={19} className="mr-3 shrink-0 text-gray-400" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search products..."
+                  aria-label="Search products"
+                  className="h-11 w-full bg-transparent text-sm outline-none"
+                />
+                <button
+                  type="submit"
+                  aria-label="Submit search"
+                  className="text-[#28551f]"
+                >
+                  <Search size={20} />
+                </button>
+              </div>
+            </form>
 
-              <input
-                placeholder="Search products..."
-                className="w-full outline-none"
-              />
-            </div>
+            <Link
+              href="/products"
+              onClick={() => setMobileMenu(false)}
+              className="mb-3 block rounded-lg bg-[#f1f5eb] px-4 py-3 font-semibold text-[#28551f]"
+            >
+              Shop All Products
+            </Link>
 
-            <div className="space-y-4">
+            <p className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-gray-400">
+              Browse Categories
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
               {categories.map((category) => (
                 <Link
                   key={category}
                   href={`/products?category=${encodeURIComponent(category)}`}
-                  className="block font-medium"
                   onClick={() => setMobileMenu(false)}
+                  className="rounded-lg border border-gray-100 px-3 py-3 text-sm font-medium text-gray-700 transition hover:border-[#d9e5cf] hover:bg-[#f7f9f3] hover:text-[#28551f]"
                 >
                   {category}
                 </Link>
               ))}
+            </div>
+
+            <div className="mt-5 border-t border-gray-100 pt-4">
+              <div className="mb-4 sm:hidden">
+                <AuthButton />
+              </div>
+
+              <Link
+                href="/wishlist"
+                onClick={() => setMobileMenu(false)}
+                className="flex items-center gap-3 py-2 text-sm font-medium text-gray-700"
+              >
+                <Heart size={19} />
+                My Wishlist
+              </Link>
+
+              <Link
+                href="/cart"
+                onClick={() => setMobileMenu(false)}
+                className="flex items-center gap-3 py-2 text-sm font-medium text-gray-700"
+              >
+                <ShoppingCart size={19} />
+                My Cart
+              </Link>
             </div>
           </div>
         )}
