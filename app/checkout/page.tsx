@@ -1,527 +1,549 @@
+
 "use client";
 
+import axios from "axios";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useCart } from "@/context/CartContext";
-import {
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  Leaf,
-  LockKeyhole,
-  MapPin,
-  ShoppingBag,
-  Truck,
-} from "lucide-react";
+
+type DeliveryResult = {
+  success: boolean;
+  pincode?: string;
+  deliveryCharge?: number;
+  message: string;
+};
+
+const INDIAN_STATES = [
+  "Andhra Pradesh",
+  "Assam",
+  "Bihar",
+  "Chandigarh",
+  "Chhattisgarh",
+  "Delhi",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Odisha",
+  "Punjab",
+  "Rajasthan",
+  "Tamil Nadu",
+  "Telangana",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+];
+
+const formatPrice = (price: number) =>
+  `₹${price.toLocaleString("en-IN")}`;
 
 export default function CheckoutPage() {
   const { items, subtotal } = useCart();
-  const [paymentMethod, setPaymentMethod] = useState("cod");
+
+  const [pincode, setPincode] = useState("");
+  const [verifiedPincode, setVerifiedPincode] = useState("");
+  const [deliveryCharge, setDeliveryCharge] = useState<number | null>(null);
+  const [deliveryMessage, setDeliveryMessage] = useState("");
+  const [checkingDelivery, setCheckingDelivery] = useState(false);
+
   const [message, setMessage] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cod");
+  const [submitting, setSubmitting] = useState(false);
 
-  const formatPrice = (price: number) =>
-    `₹${price.toLocaleString("en-IN")}`;
+  // Prevent an older API response from overwriting a newer PIN-code result.
+  const requestId = useRef(0);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const deliveryVerified =
+    verifiedPincode === pincode &&
+    /^\d{6}$/.test(pincode) &&
+    deliveryCharge !== null;
+
+  const total = subtotal + (deliveryVerified ? deliveryCharge : 0);
+
+  async function checkDelivery(code: string): Promise<number | null> {
+    const currentRequest = ++requestId.current;
+
+    setDeliveryCharge(null);
+    setVerifiedPincode("");
+    setDeliveryMessage("");
+
+    if (!/^\d{6}$/.test(code)) {
+      setDeliveryMessage("Enter a valid 6-digit PIN code.");
+      setCheckingDelivery(false);
+      return null;
+    }
+
+    setCheckingDelivery(true);
+
+    try {
+      const response = await axios.post<DeliveryResult>("/api/delivery", {
+        pincode: code,
+      });
+
+      const result = response.data;
+      const charge = result.deliveryCharge;
+
+      if (
+        !result.success ||
+        typeof charge !== "number" ||
+        !Number.isFinite(charge) ||
+        charge < 0
+      ) {
+        if (requestId.current === currentRequest) {
+          setDeliveryMessage(
+            result.message || "Delivery is not available for this PIN code."
+          );
+        }
+
+        return null;
+      }
+
+      if (requestId.current !== currentRequest) {
+        return null;
+      }
+
+      setDeliveryCharge(charge);
+      setVerifiedPincode(code);
+      setDeliveryMessage(result.message);
+
+      return charge;
+    } catch (error: unknown) {
+      if (requestId.current === currentRequest) {
+        if (axios.isAxiosError<DeliveryResult>(error)) {
+          setDeliveryMessage(
+            error.response?.data?.message ||
+              "Unable to check delivery. Please try again."
+          );
+        } else {
+          setDeliveryMessage("Something went wrong. Please try again.");
+        }
+      }
+
+      return null;
+    } finally {
+      if (requestId.current === currentRequest) {
+        setCheckingDelivery(false);
+      }
+    }
+  }
+
+  function handlePincodeChange(value: string) {
+    // Invalidate any previous request immediately.
+    requestId.current += 1;
+
+    const code = value.replace(/\D/g, "").slice(0, 6);
+
+    setPincode(code);
+    setDeliveryCharge(null);
+    setVerifiedPincode("");
+    setDeliveryMessage("");
+    setCheckingDelivery(false);
+    setMessage("");
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage(
-      "Your checkout form is ready. Connect your order API to place and save orders."
-    );
+    setMessage("");
+
+    if (items.length === 0) {
+      setMessage("Your cart is empty.");
+      return;
+    }
+
+    const form = event.currentTarget;
+
+    if (!form.reportValidity()) {
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      // Recheck delivery on submit instead of trusting only client state.
+      const verifiedCharge = await checkDelivery(pincode);
+
+      if (verifiedCharge === null) {
+        setMessage(
+          "Please enter a serviceable PIN code before continuing."
+        );
+        return;
+      }
+
+      const finalTotal = subtotal + verifiedCharge;
+
+      // Order creation and payment processing are not connected yet.
+      setMessage(
+        `Delivery verified. Delivery charge: ${
+          verifiedCharge === 0 ? "FREE" : formatPrice(verifiedCharge)
+        }. Order total: ${formatPrice(finalTotal)}. Your details have not been submitted as an order yet.`
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  if (items.length === 0) {
-    return (
-      <main className="flex min-h-[65vh] items-center justify-center bg-[#fafaf7] px-4 py-12">
-        <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-8 text-center shadow-sm">
-          <ShoppingBag
-            size={42}
-            className="mx-auto text-[#28551f]"
-          />
-          <h1 className="mt-5 text-2xl font-black text-[#26351f]">
-            Your cart is empty
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-gray-500">
-            Add some fresh products before proceeding to checkout.
-          </p>
-          <Link
-            href="/products"
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#28551f] px-5 py-3 font-bold text-white hover:bg-[#1e4018]"
-          >
-            Shop products <ArrowRight size={17} />
-          </Link>
-        </div>
-      </main>
-    );
-  }
+  const inputClass =
+    "mt-2 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10";
 
   return (
-    <main className="min-h-screen bg-white text-[#26351f]">
-      {/* Checkout header */}
-      <header className="border-b border-gray-100">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-6">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-xl font-black tracking-tight text-[#28551f] sm:text-2xl"
+    <main className="min-h-screen bg-[#fafaf7] px-4 py-8 text-[#26351f] sm:px-6 sm:py-10">
+      <div className="mx-auto max-w-6xl">
+        <Link
+          href="/cart"
+          className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-[#28551f] hover:underline"
+        >
+          <span aria-hidden="true">←</span> Back to cart
+        </Link>
+
+        <h1 className="text-3xl font-bold sm:text-4xl">Checkout</h1>
+
+        <p className="mb-8 mt-2 text-sm text-gray-600">
+          Fresh products, delivered to your doorstep.
+        </p>
+
+        {items.length === 0 ? (
+          <section className="rounded-2xl border border-gray-200 bg-white p-8 text-center">
+            <h2 className="text-xl font-semibold">Your cart is empty</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Add some fresh products before checkout.
+            </p>
+
+            <Link
+              href="/products"
+              className="mt-5 inline-flex rounded-xl bg-[#28551f] px-6 py-3 font-semibold text-white transition hover:opacity-90"
+            >
+              Shop products
+            </Link>
+          </section>
+        ) : (
+          <form
+            onSubmit={handleSubmit}
+            className="grid items-start gap-6 lg:grid-cols-[1.5fr_1fr] lg:gap-8"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eef4e8]">
-              <Leaf size={23} />
-            </span>
-            Farmer<span className="-ml-2 text-[#d7862c]">2</span>Family
-          </Link>
-
-          <div className="flex items-center gap-2 text-xs font-medium text-gray-500 sm:text-sm">
-            <LockKeyhole size={17} className="text-[#28551f]" />
-            Secure checkout
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto grid max-w-7xl lg:grid-cols-[1fr_420px]">
-        {/* Checkout form */}
-        <section className="px-4 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-12">
-          <Link
-            href="/cart"
-            className="inline-flex items-center gap-2 text-sm text-gray-500 transition hover:text-[#28551f]"
-          >
-            <ArrowLeft size={16} />
-            Return to cart
-          </Link>
-
-          <div className="mt-7 flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-semibold text-[#28551f]">Cart</span>
-            <span className="text-gray-300">/</span>
-            <span className="font-bold text-[#26351f]">Information</span>
-            <span className="text-gray-300">/</span>
-            <span className="text-gray-400">Payment</span>
-          </div>
-
-          <form onSubmit={handleSubmit} className="mt-9 space-y-9">
-            {/* Contact */}
-            <section>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h1 className="text-xl font-extrabold sm:text-2xl">
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-7">
+                <h2 className="mb-5 text-xl font-semibold">
                   Contact information
-                </h1>
-                <Link
-                  href="/login"
-                  className="text-sm font-semibold text-[#28551f] hover:underline"
-                >
-                  Log in
-                </Link>
-              </div>
+                </h2>
 
-              <label
-                htmlFor="email"
-                className="mb-2 block text-sm font-medium text-gray-700"
-              >
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                placeholder="you@example.com"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
-              />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="text-sm font-medium">
+                    First name *
+                    <input
+                      name="firstName"
+                      required
+                      autoComplete="given-name"
+                      className={inputClass}
+                      placeholder="First name"
+                    />
+                  </label>
 
-              <label className="mt-4 flex items-start gap-3 text-sm text-gray-600">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 accent-[#28551f]"
-                />
-                Email me with updates and offers.
-              </label>
-            </section>
+                  <label className="text-sm font-medium">
+                    Last name *
+                    <input
+                      name="lastName"
+                      required
+                      autoComplete="family-name"
+                      className={inputClass}
+                      placeholder="Last name"
+                    />
+                  </label>
 
-            {/* Delivery address */}
-            <section>
-              <div className="mb-4 flex items-center gap-3">
-                <MapPin size={22} className="text-[#28551f]" />
-                <h2 className="text-xl font-extrabold">
+                  <label className="text-sm font-medium sm:col-span-2">
+                    Email address *
+                    <input
+                      name="email"
+                      type="email"
+                      required
+                      autoComplete="email"
+                      className={inputClass}
+                      placeholder="you@example.com"
+                    />
+                  </label>
+
+                  <label className="text-sm font-medium sm:col-span-2">
+                    Mobile number *
+                    <input
+                      name="phone"
+                      type="tel"
+                      required
+                      autoComplete="tel"
+                      inputMode="numeric"
+                      pattern="[6-9][0-9]{9}"
+                      maxLength={10}
+                      className={inputClass}
+                      placeholder="10-digit mobile number"
+                      title="Enter a valid 10-digit Indian mobile number"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-7">
+                <h2 className="mb-5 text-xl font-semibold">
                   Delivery address
                 </h2>
-              </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="firstName" className="mb-2 block text-sm font-medium">
-                    First name
+                <div className="space-y-4">
+                  <label className="block text-sm font-medium">
+                    House number and street address *
+                    <input
+                      name="address"
+                      required
+                      autoComplete="street-address"
+                      className={inputClass}
+                      placeholder="House number, street, area"
+                    />
                   </label>
-                  <input
-                    id="firstName"
-                    name="firstName"
-                    autoComplete="given-name"
-                    required
-                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
-                  />
-                </div>
 
-                <div>
-                  <label htmlFor="lastName" className="mb-2 block text-sm font-medium">
-                    Last name
+                  <label className="block text-sm font-medium">
+                    Landmark
+                    <input
+                      name="landmark"
+                      className={inputClass}
+                      placeholder="Nearby landmark (optional)"
+                    />
                   </label>
-                  <input
-                    id="lastName"
-                    name="lastName"
-                    autoComplete="family-name"
-                    required
-                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
-                  />
-                </div>
-              </div>
 
-              <div className="mt-4">
-                <label htmlFor="phone" className="mb-2 block text-sm font-medium">
-                  Mobile number
-                </label>
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  autoComplete="tel"
-                  inputMode="numeric"
-                  pattern="[6-9][0-9]{9}"
-                  maxLength={10}
-                  required
-                  placeholder="10-digit mobile number"
-                  title="Enter a valid 10-digit Indian mobile number"
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
-                />
-              </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="text-sm font-medium">
+                      City *
+                      <input
+                        name="city"
+                        required
+                        autoComplete="address-level2"
+                        className={inputClass}
+                        placeholder="City"
+                      />
+                    </label>
 
-              <div className="mt-4">
-                <label htmlFor="address" className="mb-2 block text-sm font-medium">
-                  House number, street and address
-                </label>
-                <input
-                  id="address"
-                  name="address"
-                  autoComplete="street-address"
-                  required
-                  placeholder="House number and street name"
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
-                />
-              </div>
+                    <label className="text-sm font-medium">
+                      State *
+                      <select
+                        name="state"
+                        required
+                        defaultValue=""
+                        autoComplete="address-level1"
+                        className={inputClass}
+                      >
+                        <option value="" disabled>
+                          Select state
+                        </option>
 
-              <div className="mt-4">
-                <label htmlFor="landmark" className="mb-2 block text-sm font-medium">
-                  Apartment, landmark or area (optional)
-                </label>
-                <input
-                  id="landmark"
-                  name="landmark"
-                  placeholder="Apartment, landmark or locality"
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
-                />
-              </div>
+                        {INDIAN_STATES.map((state) => (
+                          <option key={state} value={state}>
+                            {state}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="city" className="mb-2 block text-sm font-medium">
-                    City
+                  <label className="block text-sm font-medium">
+                    PIN code *
+                    <input
+                      name="pincode"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      required
+                      value={pincode}
+                      onChange={(event) =>
+                        handlePincodeChange(event.target.value)
+                      }
+                      onBlur={() => {
+                        if (pincode.length === 6 && !deliveryVerified) {
+                          void checkDelivery(pincode);
+                        }
+                      }}
+                      className={inputClass}
+                      placeholder="Enter 6-digit PIN code"
+                    />
+
+                    {deliveryMessage && (
+                      <span
+                        role="status"
+                        className={`mt-2 block text-sm ${
+                          deliveryVerified
+                            ? "text-[#28551f]"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {deliveryMessage}
+                      </span>
+                    )}
+
+                    {checkingDelivery && (
+                      <span
+                        role="status"
+                        className="mt-2 block text-sm text-gray-500"
+                      >
+                        Checking delivery availability...
+                      </span>
+                    )}
                   </label>
-                  <input
-                    id="city"
-                    name="city"
-                    autoComplete="address-level2"
-                    required
-                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
-                  />
-                </div>
 
-                <div>
-                  <label htmlFor="state" className="mb-2 block text-sm font-medium">
-                    State
+                  <label className="block text-sm font-medium">
+                    Order notes
+                    <textarea
+                      name="notes"
+                      rows={3}
+                      className={inputClass}
+                      placeholder="Special delivery instructions (optional)"
+                    />
                   </label>
-                  <select
-                    id="state"
-                    name="state"
-                    autoComplete="address-level1"
-                    required
-                    defaultValue=""
-                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
-                  >
-                    <option value="" disabled>
-                      Select state
-                    </option>
-                    <option>Haryana</option>
-                    <option>Delhi</option>
-                    <option>Punjab</option>
-                    <option>Uttar Pradesh</option>
-                    <option>Rajasthan</option>
-                    <option>Himachal Pradesh</option>
-                    <option>Uttarakhand</option>
-                    <option>Maharashtra</option>
-                    <option>Karnataka</option>
-                    <option>Other</option>
-                  </select>
                 </div>
-              </div>
+              </section>
 
-              <div className="mt-4">
-                <label htmlFor="pincode" className="mb-2 block text-sm font-medium">
-                  PIN code
-                </label>
-                <input
-                  id="pincode"
-                  name="pincode"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  autoComplete="postal-code"
-                  required
-                  placeholder="6-digit PIN code"
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
-                />
-              </div>
+              <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-7">
+                <h2 className="mb-4 text-xl font-semibold">Payment method</h2>
 
-              <div className="mt-4">
-                <label htmlFor="notes" className="mb-2 block text-sm font-medium">
-                  Delivery instructions (optional)
-                </label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  rows={3}
-                  placeholder="Any directions for our delivery team?"
-                  className="w-full resize-y rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-[#28551f] focus:ring-2 focus:ring-[#28551f]/10"
-                />
-              </div>
-            </section>
-
-            {/* Delivery method */}
-            <section>
-              <h2 className="text-xl font-extrabold">
-                Delivery method
-              </h2>
-
-              <div className="mt-4 flex items-start gap-3 rounded-xl border border-[#28551f] bg-[#f5f8f1] p-4">
-                <Truck size={22} className="mt-0.5 text-[#28551f]" />
-                <div>
-                  <p className="font-bold">Home delivery</p>
-                  <p className="mt-1 text-sm leading-5 text-gray-500">
-                    Delivery availability and charges will be confirmed for
-                    your address.
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            {/* Payment method */}
-            <section>
-              <h2 className="text-xl font-extrabold">
-                Payment method
-              </h2>
-              <p className="mt-2 text-sm text-gray-500">
-                Choose how you would prefer to pay.
-              </p>
-
-              <div className="mt-4 overflow-hidden rounded-xl border border-gray-200">
-                <label className="flex cursor-pointer items-center gap-3 border-b border-gray-200 p-4">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-4 transition hover:border-[#28551f]">
                   <input
                     type="radio"
                     name="paymentMethod"
                     value="cod"
                     checked={paymentMethod === "cod"}
-                    onChange={(event) => setPaymentMethod(event.target.value)}
-                    className="h-4 w-4 accent-[#28551f]"
+                    onChange={(event) =>
+                      setPaymentMethod(event.target.value)
+                    }
+                    className="mt-1 accent-[#28551f]"
                   />
-                  <div className="flex-1">
-                    <p className="text-sm font-bold">Cash on delivery</p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Pay when your order arrives, if available.
-                    </p>
-                  </div>
+
+                  <span>
+                    <span className="block font-semibold">
+                      Cash on delivery
+                    </span>
+                    <span className="mt-1 block text-sm text-gray-600">
+                      Pay when your order arrives.
+                    </span>
+                  </span>
                 </label>
 
-                <label className="flex cursor-pointer items-center gap-3 p-4">
+                <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-4 transition hover:border-[#28551f]">
                   <input
                     type="radio"
                     name="paymentMethod"
                     value="online"
                     checked={paymentMethod === "online"}
-                    onChange={(event) => setPaymentMethod(event.target.value)}
-                    className="h-4 w-4 accent-[#28551f]"
+                    onChange={(event) =>
+                      setPaymentMethod(event.target.value)
+                    }
+                    className="mt-1 accent-[#28551f]"
                   />
-                  <div className="flex-1">
-                    <p className="text-sm font-bold">Pay online</p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Online payment will be available after payment gateway
-                      integration.
-                    </p>
-                  </div>
+
+                  <span>
+                    <span className="block font-semibold">
+                      Online payment
+                    </span>
+                    <span className="mt-1 block text-sm text-gray-600">
+                      Requires a connected payment provider.
+                    </span>
+                  </span>
                 </label>
-              </div>
-            </section>
+              </section>
 
-            {message && (
-              <div
-                role="status"
-                className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900"
+              {message && (
+                <p
+                  role="status"
+                  className="rounded-xl border border-gray-200 bg-white p-4 text-sm"
+                >
+                  {message}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting || checkingDelivery}
+                className="w-full rounded-xl bg-[#28551f] px-6 py-4 font-semibold text-white transition hover:bg-[#21451a] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {message}
-              </div>
-            )}
+                {submitting
+                  ? "Verifying..."
+                  : "Verify delivery & continue"}
+              </button>
 
-            <button
-              type="submit"
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#28551f] px-6 py-4 font-bold text-white shadow-sm transition hover:bg-[#1e4018]"
-            >
-              Continue with{" "}
-              {paymentMethod === "cod" ? "cash on delivery" : "online payment"}
-              <ArrowRight size={18} />
-            </button>
+              <p className="text-center text-xs text-gray-500">
+                Order placement is not enabled until the order API is
+                connected.
+              </p>
+            </div>
 
-            <p className="flex items-center justify-center gap-2 text-center text-xs text-gray-400">
-              <LockKeyhole size={14} />
-              Your information should be handled securely.
-            </p>
-          </form>
+            <aside className="h-fit rounded-2xl border border-gray-200 bg-white p-5 sm:p-7 lg:sticky lg:top-6">
+              <h2 className="mb-5 text-xl font-semibold">Order summary</h2>
 
-          <div className="mt-8 border-t border-gray-100 pt-5">
-            <Link
-              href="/products"
-              className="text-sm font-medium text-[#28551f] hover:underline"
-            >
-              Continue shopping
-            </Link>
-          </div>
-        </section>
-
-        {/* Order summary */}
-        <aside className="border-t border-gray-200 bg-[#fafbf8] px-4 py-8 sm:px-8 lg:border-l lg:border-t-0 lg:px-8 lg:py-12">
-          <div className="lg:sticky lg:top-8">
-            <h2 className="text-xl font-extrabold">
-              Order summary
-            </h2>
-
-            <div className="mt-6 space-y-5">
-              {items.map((item) => {
-                const isPhoto =
-                  !!item.image &&
-                  (item.image.startsWith("/") ||
-                    item.image.startsWith("data:image/") ||
-                    /^https?:\/\//i.test(item.image));
-
-                return (
+              <div className="max-h-80 space-y-4 overflow-y-auto">
+                {items.map((item) => (
                   <div
                     key={item._id}
-                    className="flex items-center gap-4"
+                    className="flex justify-between gap-4 text-sm"
                   >
-                    <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
-                      {isPhoto ? (
-                        <img
-                          src={item.image!}
-                          alt={item.name}
-                          className="h-full w-full rounded-xl object-contain p-1"
-                        />
-                      ) : (
-                        <span className="text-3xl">
-                          {item.image || "🌱"}
-                        </span>
-                      )}
-                      <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-gray-500 px-1 text-xs font-bold text-white">
-                        {item.quantity}
-                      </span>
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold">
-                        {item.name}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-500">
-                        {item.quantity} × {formatPrice(item.price)}
+                    <div className="min-w-0">
+                      <p className="wrap-break-words font-medium">{item.name}</p>
+                      <p className="mt-1 text-gray-500">
+                        Qty: {item.quantity}
+                        {item.unit ? ` · ${item.unit}` : ""}
                       </p>
                     </div>
 
-                    <p className="shrink-0 text-sm font-semibold">
+                    <p className="shrink-0 font-medium">
                       {formatPrice(item.price * item.quantity)}
                     </p>
                   </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-7 border-t border-gray-200 pt-5">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Discount code"
-                  aria-label="Discount code"
-                  disabled
-                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm opacity-70"
-                />
-                <button
-                  type="button"
-                  disabled
-                  className="rounded-xl bg-gray-200 px-4 text-sm font-bold text-gray-500"
-                >
-                  Apply
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-gray-400">
-                Discount codes are not enabled yet.
-              </p>
-            </div>
-
-            <div className="mt-7 space-y-4 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="text-gray-600">Subtotal</span>
-                <span className="font-semibold">
-                  {formatPrice(subtotal)}
-                </span>
+                ))}
               </div>
 
-              <div className="flex justify-between gap-4">
-                <span className="text-gray-600">Shipping</span>
-                <span className="text-right text-xs text-gray-500">
-                  Calculated after address confirmation
-                </span>
-              </div>
+              <div className="my-5 border-t border-gray-200" />
 
-              <div className="flex items-center justify-between gap-4 border-t border-gray-200 pt-5">
-                <span className="text-base font-bold">Total</span>
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">INR</p>
-                  <p className="text-2xl font-black text-[#28551f]">
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-600">Subtotal</span>
+                  <span className="font-medium">
                     {formatPrice(subtotal)}
-                  </p>
+                  </span>
+                </div>
+
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-600">Delivery charge</span>
+                  <span className="font-medium">
+                    {!deliveryVerified
+                      ? "To be confirmed"
+                      : deliveryCharge === 0
+                        ? "FREE"
+                        : formatPrice(deliveryCharge)}
+                  </span>
                 </div>
               </div>
 
-              <p className="text-xs leading-5 text-gray-500">
-                Shipping charges, if applicable, will be confirmed before
-                your order is finalized.
-              </p>
-            </div>
+              <div className="my-5 border-t border-gray-200" />
 
-            <div className="mt-7 flex items-start gap-3 rounded-xl border border-[#e3eadc] bg-white p-4">
-              <CheckCircle2
-                size={20}
-                className="mt-0.5 shrink-0 text-[#28551f]"
-              />
-              <div>
-                <p className="text-sm font-bold">
-                  Freshness comes first
-                </p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Farmer2Family brings farm-fresh products closer to your
-                  family.
-                </p>
+              <div className="flex justify-between gap-3 text-lg font-bold">
+                <span>Total</span>
+                <span>{formatPrice(total)}</span>
               </div>
-            </div>
 
-            <Link
-              href="/cart"
-              className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#28551f] hover:underline"
-            >
-              <ArrowLeft size={15} />
-              Edit cart
-            </Link>
-          </div>
-        </aside>
+              {!deliveryVerified && (
+                <p className="mt-3 text-xs text-gray-500">
+                  Enter a serviceable PIN code to confirm delivery charges
+                  and the final total.
+                </p>
+              )}
+
+              <Link
+                href="/cart"
+                className="mt-5 block text-center text-sm font-medium text-[#28551f] hover:underline"
+              >
+                Edit cart
+              </Link>
+            </aside>
+          </form>
+        )}
       </div>
     </main>
   );

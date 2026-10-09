@@ -6,7 +6,7 @@ import Link from "next/link";
 export default function LoginPage() {
   async function handleGoogleLogin() {
     await signIn("google", {
-      callbackUrl: "/account",
+      callbackUrl: "/",
     });
   }
 

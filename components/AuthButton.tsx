@@ -19,7 +19,7 @@ export default function AuthButton() {
       <button
         onClick={() =>
           signIn("google", {
-            callbackUrl: "/account",
+            callbackUrl: "/",
           })
         }
         className="rounded-full bg-[#28551f] px-5 py-2 font-bold text-white transition hover:bg-[#1c3e17]"
