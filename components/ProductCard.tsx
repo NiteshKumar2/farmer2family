@@ -3,14 +3,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
-import { ShoppingCart, Heart, Leaf, ArrowRight, ImageOff } from "lucide-react";
+import {
+  ShoppingCart,
+  Heart,
+  Leaf,
+  ArrowRight,
+  ImageOff,
+  Plus,
+  Minus,
+  Trash2,
+} from "lucide-react";
 
 type Product = {
   _id?: string;
   name: string;
   category: string;
   price: number;
-  salePrice?: number;
+  salePrice?: number | null;
   unit: string;
   image?: string | null;
 };
@@ -18,6 +27,8 @@ type Product = {
 export default function ProductCard({ product }: { product: Product }) {
   const [isFavorite, setIsFavorite] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+
+  const { items, addToCart, updateQuantity, removeFromCart } = useCart();
 
   const imageValue = product.image?.trim() ?? "";
 
@@ -36,11 +47,17 @@ export default function ProductCard({ product }: { product: Product }) {
   const displayPrice = hasDiscount ? product.salePrice! : product.price;
 
   const discountPercentage = hasDiscount
-    ? Math.round(((product.price - product.salePrice!) / product.price) * 100)
+    ? Math.round(
+        ((product.price - product.salePrice!) / product.price) * 100,
+      )
     : 0;
 
-  const productHref = product._id ? `/products/${product._id}` : "/products";
-  const { addToCart } = useCart();
+  const productHref = product._id
+    ? `/products/${product._id}`
+    : "/products";
+
+  const cartItem = items.find((item) => item._id === product._id);
+  const quantity = cartItem?.quantity ?? 0;
 
   function handleAddToCart() {
     if (!product._id) return;
@@ -52,6 +69,26 @@ export default function ProductCard({ product }: { product: Product }) {
       image: product.image ?? undefined,
       unit: product.unit,
     });
+  }
+
+  function handleDecrease() {
+    if (!product._id || quantity <= 0) return;
+
+    if (quantity === 1) {
+      removeFromCart(product._id);
+    } else {
+      updateQuantity(product._id, quantity - 1);
+    }
+  }
+
+  function handleIncrease() {
+    if (!product._id) return;
+
+    if (quantity === 0) {
+      handleAddToCart();
+    } else {
+      updateQuantity(product._id, quantity + 1);
+    }
   }
 
   return (
@@ -113,7 +150,9 @@ export default function ProductCard({ product }: { product: Product }) {
         {/* Favorite button */}
         <button
           type="button"
-          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+          aria-label={
+            isFavorite ? "Remove from favorites" : "Add to favorites"
+          }
           aria-pressed={isFavorite}
           onClick={() => setIsFavorite((previous) => !previous)}
           className={`absolute right-2 top-11 flex h-9 w-9 items-center justify-center rounded-full shadow-sm transition sm:right-3 sm:top-14 sm:h-10 sm:w-10 ${
@@ -157,25 +196,70 @@ export default function ProductCard({ product }: { product: Product }) {
             )}
           </div>
 
-          {/* Product action */}
-          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-            <button
-              type="button"
-              onClick={handleAddToCart}
-              className="flex items-center justify-center gap-2 rounded-xl bg-[#28551f] px-3 py-2.5 text-xs font-bold text-white transition hover:bg-[#1c3e17] sm:text-sm"
-            >
-              <ShoppingCart size={16} />
-              Add to Cart
-            </button>
+          {/* Add button / quantity selector */}
+          <div className="mt-3">
+            {quantity === 0 ? (
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                disabled={!product._id}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#28551f] bg-[#28551f] px-3 text-sm font-bold text-white transition hover:bg-[#1c3e17] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ShoppingCart size={17} />
+                Add
+              </button>
+            ) : (
+              <div className="flex h-11 w-full items-center justify-between overflow-hidden rounded-xl border border-[#28551f] bg-[#28551f] text-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={handleDecrease}
+                  aria-label={
+                    quantity === 1
+                      ? `Remove ${product.name} from cart`
+                      : `Decrease ${product.name} quantity`
+                  }
+                  className="flex h-full w-11 shrink-0 items-center justify-center transition hover:bg-[#1c3e17] active:bg-[#173313]"
+                >
+                  {quantity === 1 ? (
+                    <Trash2 size={16} />
+                  ) : (
+                    <Minus size={17} />
+                  )}
+                </button>
 
-            <Link
-              href={productHref}
-              aria-label={`View ${product.name}`}
-              className="flex items-center justify-center rounded-xl border border-[#28551f]/20 px-3 py-2.5 text-[#28551f] transition hover:bg-[#eef4e8]"
-            >
-              <ArrowRight size={17} />
-            </Link>
+                <span
+                  className="flex-1 text-center text-sm font-extrabold tabular-nums"
+                  aria-live="polite"
+                  aria-label={`Quantity ${quantity}`}
+                >
+                  {quantity}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={handleIncrease}
+                  aria-label={`Increase ${product.name} quantity`}
+                  className="flex h-full w-11 shrink-0 items-center justify-center transition hover:bg-[#1c3e17] active:bg-[#173313]"
+                >
+                  <Plus size={17} />
+                </button>
+              </div>
+            )}
           </div>
+
+          {quantity > 0 && (
+            <p className="mt-2 text-center text-xs font-medium text-[#527345]">
+              Added to your cart
+            </p>
+          )}
+
+          <Link
+            href={productHref}
+            className="mt-3 flex items-center justify-center gap-1 text-xs font-semibold text-gray-500 transition hover:text-[#28551f]"
+          >
+            View product details
+            <ArrowRight size={14} />
+          </Link>
         </div>
       </div>
     </article>

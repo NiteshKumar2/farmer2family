@@ -46,9 +46,7 @@ export default function Header() {
         <span className="mr-2">🚚</span>
         Fresh from farms, delivered to your family
         <span className="mx-2 hidden text-white/50 sm:inline">|</span>
-        <span className="hidden sm:inline">
-          Natural goodness in every bite
-        </span>
+        <span className="hidden sm:inline">Natural goodness in every bite</span>
       </div>
 
       <header className="sticky top-0 z-50 border-b border-gray-100 bg-white shadow-sm">
@@ -126,9 +124,11 @@ export default function Header() {
               className="relative flex h-10 w-10 items-center justify-center rounded-full text-[#28551f] transition hover:bg-[#f4f7ef]"
             >
               <ShoppingCart size={22} />
-              <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d7862c] px-1 text-[10px] font-bold text-white">
-                0
-              </span>
+              {cartCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d7862c] px-1 text-[10px] font-bold text-white">
+                  {cartCount > 99 ? "99+" : cartCount}
+                </span>
+              )}
             </Link>
           </div>
         </div>
