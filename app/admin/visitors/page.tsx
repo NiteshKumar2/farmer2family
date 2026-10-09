@@ -200,7 +200,7 @@ export default function AdminVisitorsPage() {
           ) : (
             <div className="overflow-x-auto">
 
-              <table className="w-full min-w-[1050px]">
+              <table className="w-full min-w-262.5">
 
                 <thead className="border-b bg-[#f8f9f4]">
 
@@ -300,7 +300,7 @@ export default function AdminVisitorsPage() {
 
                       {/* ADDRESS */}
 
-                      <td className="max-w-[220px] px-5 py-5 text-sm text-gray-600">
+                      <td className="max-w-55 px-5 py-5 text-sm text-gray-600">
 
                         {visitor.address ? (
                           <div className="flex gap-2">

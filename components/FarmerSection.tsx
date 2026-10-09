@@ -6,7 +6,7 @@ export default function FarmerSection() {
 
       <div className="grid items-center gap-10 md:grid-cols-2">
 
-        <div className="flex min-h-[420px] items-center justify-center rounded-3xl bg-[#dcebd2]">
+        <div className="flex min-h-105 items-center justify-center rounded-3xl bg-[#dcebd2]">
           <div className="text-center">
             <div className="text-9xl">👨‍🌾</div>
 

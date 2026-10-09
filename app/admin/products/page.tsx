@@ -457,7 +457,7 @@ export default function AdminProductsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px]">
+              <table className="w-full min-w-200">
                 <thead className="border-b bg-[#f8f9f4]">
                   <tr>
                     <th className="px-5 py-4 text-left text-sm">
@@ -581,7 +581,7 @@ export default function AdminProductsPage() {
 
       {/* Add / Edit modal */}
       {showForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-6 py-5">
               <div>
