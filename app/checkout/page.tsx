@@ -3,6 +3,7 @@
 
 import axios from "axios";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 import { useCart } from "@/context/CartContext";
 
@@ -11,6 +12,13 @@ type DeliveryResult = {
   pincode?: string;
   deliveryCharge?: number;
   message: string;
+};
+
+type OrderResult = {
+  success?: boolean;
+  orderId?: string;
+  error?: string;
+  message?: string;
 };
 
 const INDIAN_STATES = [
@@ -43,7 +51,8 @@ const formatPrice = (price: number) =>
   `₹${price.toLocaleString("en-IN")}`;
 
 export default function CheckoutPage() {
-  const { items, subtotal } = useCart();
+  const router = useRouter();
+  const { items, subtotal, clearCart } = useCart();
 
   const [pincode, setPincode] = useState("");
   const [verifiedPincode, setVerifiedPincode] = useState("");
@@ -55,7 +64,7 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [submitting, setSubmitting] = useState(false);
 
-  // Prevent an older API response from overwriting a newer PIN-code result.
+  // Prevent older PIN-code requests from overwriting newer results.
   const requestId = useRef(0);
 
   const deliveryVerified =
@@ -63,7 +72,8 @@ export default function CheckoutPage() {
     /^\d{6}$/.test(pincode) &&
     deliveryCharge !== null;
 
-  const total = subtotal + (deliveryVerified ? deliveryCharge : 0);
+  const total =
+    subtotal + (deliveryVerified ? deliveryCharge ?? 0 : 0);
 
   async function checkDelivery(code: string): Promise<number | null> {
     const currentRequest = ++requestId.current;
@@ -81,9 +91,10 @@ export default function CheckoutPage() {
     setCheckingDelivery(true);
 
     try {
-      const response = await axios.post<DeliveryResult>("/api/delivery", {
-        pincode: code,
-      });
+      const response = await axios.post<DeliveryResult>(
+        "/api/delivery",
+        { pincode: code }
+      );
 
       const result = response.data;
       const charge = result.deliveryCharge;
@@ -96,7 +107,8 @@ export default function CheckoutPage() {
       ) {
         if (requestId.current === currentRequest) {
           setDeliveryMessage(
-            result.message || "Delivery is not available for this PIN code."
+            result.message ||
+              "Delivery is not available for this PIN code."
           );
         }
 
@@ -109,7 +121,9 @@ export default function CheckoutPage() {
 
       setDeliveryCharge(charge);
       setVerifiedPincode(code);
-      setDeliveryMessage(result.message);
+      setDeliveryMessage(
+        result.message || "Delivery is available for this PIN code."
+      );
 
       return charge;
     } catch (error: unknown) {
@@ -133,7 +147,7 @@ export default function CheckoutPage() {
   }
 
   function handlePincodeChange(value: string) {
-    // Invalidate any previous request immediately.
+    // Invalidate any pending delivery request.
     requestId.current += 1;
 
     const code = value.replace(/\D/g, "").slice(0, 6);
@@ -150,6 +164,8 @@ export default function CheckoutPage() {
     event.preventDefault();
     setMessage("");
 
+    if (submitting) return;
+
     if (items.length === 0) {
       setMessage("Your cart is empty.");
       return;
@@ -161,27 +177,85 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (paymentMethod !== "cod") {
+      setMessage(
+        "Online payment is not available yet. Please select Cash on delivery."
+      );
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      // Recheck delivery on submit instead of trusting only client state.
+      // Recheck delivery immediately before submitting the order.
       const verifiedCharge = await checkDelivery(pincode);
 
       if (verifiedCharge === null) {
         setMessage(
-          "Please enter a serviceable PIN code before continuing."
+          "Please enter a serviceable PIN code before placing your order."
         );
         return;
       }
 
-      const finalTotal = subtotal + verifiedCharge;
+      const formData = new FormData(form);
 
-      // Order creation and payment processing are not connected yet.
-      setMessage(
-        `Delivery verified. Delivery charge: ${
-          verifiedCharge === 0 ? "FREE" : formatPrice(verifiedCharge)
-        }. Order total: ${formatPrice(finalTotal)}. Your details have not been submitted as an order yet.`
+      const firstName = String(
+        formData.get("firstName") || ""
+      ).trim();
+
+      const lastName = String(
+        formData.get("lastName") || ""
+      ).trim();
+
+      const customer = {
+        name: `${firstName} ${lastName}`.trim(),
+        email: String(formData.get("email") || "").trim(),
+        phone: String(formData.get("phone") || "").trim(),
+        address: String(formData.get("address") || "").trim(),
+        landmark: String(formData.get("landmark") || "").trim(),
+        city: String(formData.get("city") || "").trim(),
+        state: String(formData.get("state") || "").trim(),
+        pincode,
+        notes: String(formData.get("notes") || "").trim(),
+      };
+
+      // Prices and totals must be calculated and validated by the API.
+      const response = await axios.post<OrderResult>("/api/orders", {
+        customer,
+        items: items.map((item) => ({
+          productId: item._id,
+          quantity: item.quantity,
+        })),
+        paymentMethod: "cod",
+      });
+
+      const orderId = response.data?.orderId;
+
+      if (!orderId) {
+        throw new Error(
+          response.data?.message ||
+            "The server did not return an order ID."
+        );
+      }
+
+      // Only clear the cart after the API confirms order creation.
+      clearCart();
+
+      router.push(
+        `/order-success?orderId=${encodeURIComponent(String(orderId))}`
       );
+    } catch (error: unknown) {
+      if (axios.isAxiosError<OrderResult>(error)) {
+        setMessage(
+          error.response?.data?.error ||
+            error.response?.data?.message ||
+            "Unable to place your order. Please try again."
+        );
+      } else if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Something went wrong. Please try again.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -200,7 +274,9 @@ export default function CheckoutPage() {
           <span aria-hidden="true">←</span> Back to cart
         </Link>
 
-        <h1 className="text-3xl font-bold sm:text-4xl">Checkout</h1>
+        <h1 className="text-3xl font-bold sm:text-4xl">
+          Checkout
+        </h1>
 
         <p className="mb-8 mt-2 text-sm text-gray-600">
           Fresh products, delivered to your doorstep.
@@ -208,7 +284,10 @@ export default function CheckoutPage() {
 
         {items.length === 0 ? (
           <section className="rounded-2xl border border-gray-200 bg-white p-8 text-center">
-            <h2 className="text-xl font-semibold">Your cart is empty</h2>
+            <h2 className="text-xl font-semibold">
+              Your cart is empty
+            </h2>
+
             <p className="mt-2 text-sm text-gray-600">
               Add some fresh products before checkout.
             </p>
@@ -226,6 +305,7 @@ export default function CheckoutPage() {
             className="grid items-start gap-6 lg:grid-cols-[1.5fr_1fr] lg:gap-8"
           >
             <div className="space-y-6">
+              {/* Contact information */}
               <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-7">
                 <h2 className="mb-5 text-xl font-semibold">
                   Contact information
@@ -284,6 +364,7 @@ export default function CheckoutPage() {
                 </div>
               </section>
 
+              {/* Delivery address */}
               <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-7">
                 <h2 className="mb-5 text-xl font-semibold">
                   Delivery address
@@ -359,7 +440,11 @@ export default function CheckoutPage() {
                         handlePincodeChange(event.target.value)
                       }
                       onBlur={() => {
-                        if (pincode.length === 6 && !deliveryVerified) {
+                        if (
+                          pincode.length === 6 &&
+                          !deliveryVerified &&
+                          !checkingDelivery
+                        ) {
                           void checkDelivery(pincode);
                         }
                       }}
@@ -402,8 +487,11 @@ export default function CheckoutPage() {
                 </div>
               </section>
 
+              {/* Payment method */}
               <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-7">
-                <h2 className="mb-4 text-xl font-semibold">Payment method</h2>
+                <h2 className="mb-4 text-xl font-semibold">
+                  Payment method
+                </h2>
 
                 <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-4 transition hover:border-[#28551f]">
                   <input
@@ -444,7 +532,7 @@ export default function CheckoutPage() {
                       Online payment
                     </span>
                     <span className="mt-1 block text-sm text-gray-600">
-                      Requires a connected payment provider.
+                      Online payment is not available yet.
                     </span>
                   </span>
                 </label>
@@ -452,8 +540,8 @@ export default function CheckoutPage() {
 
               {message && (
                 <p
-                  role="status"
-                  className="rounded-xl border border-gray-200 bg-white p-4 text-sm"
+                  role="alert"
+                  className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
                 >
                   {message}
                 </p>
@@ -465,18 +553,22 @@ export default function CheckoutPage() {
                 className="w-full rounded-xl bg-[#28551f] px-6 py-4 font-semibold text-white transition hover:bg-[#21451a] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting
-                  ? "Verifying..."
-                  : "Verify delivery & continue"}
+                  ? "Placing your order..."
+                  : paymentMethod === "cod"
+                    ? "Place COD Order"
+                    : "Online payment unavailable"}
               </button>
 
               <p className="text-center text-xs text-gray-500">
-                Order placement is not enabled until the order API is
-                connected.
+                Your order will be submitted after successful validation.
               </p>
             </div>
 
+            {/* Order summary */}
             <aside className="h-fit rounded-2xl border border-gray-200 bg-white p-5 sm:p-7 lg:sticky lg:top-6">
-              <h2 className="mb-5 text-xl font-semibold">Order summary</h2>
+              <h2 className="mb-5 text-xl font-semibold">
+                Order summary
+              </h2>
 
               <div className="max-h-80 space-y-4 overflow-y-auto">
                 {items.map((item) => (
@@ -485,7 +577,10 @@ export default function CheckoutPage() {
                     className="flex justify-between gap-4 text-sm"
                   >
                     <div className="min-w-0">
-                      <p className="wrap-break-words font-medium">{item.name}</p>
+                      <p className="wrap-break-words font-medium">
+                        {item.name}
+                      </p>
+
                       <p className="mt-1 text-gray-500">
                         Qty: {item.quantity}
                         {item.unit ? ` · ${item.unit}` : ""}
@@ -510,13 +605,16 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="flex justify-between gap-3">
-                  <span className="text-gray-600">Delivery charge</span>
+                  <span className="text-gray-600">
+                    Delivery charge
+                  </span>
+
                   <span className="font-medium">
                     {!deliveryVerified
                       ? "To be confirmed"
                       : deliveryCharge === 0
                         ? "FREE"
-                        : formatPrice(deliveryCharge)}
+                        : formatPrice(deliveryCharge ?? 0)}
                   </span>
                 </div>
               </div>
@@ -530,8 +628,8 @@ export default function CheckoutPage() {
 
               {!deliveryVerified && (
                 <p className="mt-3 text-xs text-gray-500">
-                  Enter a serviceable PIN code to confirm delivery charges
-                  and the final total.
+                  Enter a serviceable PIN code to confirm delivery
+                  charges and the final total.
                 </p>
               )}
 
