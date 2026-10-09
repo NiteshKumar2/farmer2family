@@ -30,7 +30,7 @@ export default function Footer() {
               Categories
             </Link>
 
-            <Link href="/checkout" className="block">
+            <Link href="/cart" className="block">
               Cart
             </Link>
           </div>

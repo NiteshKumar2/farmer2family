@@ -121,7 +121,7 @@ export default function Header() {
             </div>
 
             <Link
-              href="/checkout"
+              href="/cart"
               aria-label={`Shopping cart, ${cartCount} items`}
               className="relative flex h-10 w-10 items-center justify-center rounded-full text-[#28551f] transition hover:bg-[#f4f7ef]"
             >
@@ -224,7 +224,7 @@ export default function Header() {
               </Link>
 
               <Link
-                href="/checkout"
+                href="/cart"
                 onClick={() => setMobileMenu(false)}
                 className="flex items-center gap-3 py-2 text-sm font-medium text-gray-700"
               >

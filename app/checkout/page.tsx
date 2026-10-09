@@ -80,7 +80,7 @@ export default function CheckoutPage() {
         {/* Checkout form */}
         <section className="px-4 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-12">
           <Link
-            href="/checkout"
+            href="/cart"
             className="inline-flex items-center gap-2 text-sm text-gray-500 transition hover:text-[#28551f]"
           >
             <ArrowLeft size={16} />
@@ -514,7 +514,7 @@ export default function CheckoutPage() {
             </div>
 
             <Link
-              href="/checkout"
+              href="/cart"
               className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#28551f] hover:underline"
             >
               <ArrowLeft size={15} />
