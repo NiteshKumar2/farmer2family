@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import AuthButton from "@/components/AuthButton";
+import { useCart } from "@/context/CartContext";
 
 const categories = [
   "Vegetables",
@@ -25,6 +26,7 @@ const categories = [
 ];
 
 export default function Header() {
+  const { cartCount } = useCart();
   const [mobileMenu, setMobileMenu] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -119,8 +121,8 @@ export default function Header() {
             </div>
 
             <Link
-              href="/cart"
-              aria-label="Shopping cart"
+              href="/checkout"
+              aria-label={`Shopping cart, ${cartCount} items`}
               className="relative flex h-10 w-10 items-center justify-center rounded-full text-[#28551f] transition hover:bg-[#f4f7ef]"
             >
               <ShoppingCart size={22} />
@@ -222,7 +224,7 @@ export default function Header() {
               </Link>
 
               <Link
-                href="/cart"
+                href="/checkout"
                 onClick={() => setMobileMenu(false)}
                 className="flex items-center gap-3 py-2 text-sm font-medium text-gray-700"
               >
