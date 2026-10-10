@@ -38,7 +38,7 @@ export default function RegisterPage() {
     };
 
     try {
-      const response = await fetch("/api/visitors", {
+      const response = await fetch("/api/admin/visitors", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
