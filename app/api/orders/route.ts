@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
@@ -26,7 +25,7 @@ export async function POST(request: NextRequest) {
   let session: mongoose.ClientSession | undefined;
 
   try {
-    // Connect before creating a MongoDB session.
+    // Connect to MongoDB before creating the transaction session.
     await connectDB();
 
     const body = await request.json();
@@ -35,6 +34,7 @@ export async function POST(request: NextRequest) {
     const items = body.items as RequestedItem[] | undefined;
     const paymentMethod = body.paymentMethod;
 
+    // Only Cash on Delivery is supported currently.
     if (paymentMethod !== "cod") {
       return NextResponse.json(
         { error: "Only Cash on Delivery is currently available." },
@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate customer and delivery details.
     if (
       !customer ||
       !customer.name?.trim() ||
@@ -59,6 +60,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate cart items.
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
         { error: "Your cart is empty." },
@@ -87,8 +89,12 @@ export async function POST(request: NextRequest) {
     const quantities = new Map<string, number>();
 
     for (const item of items) {
-      const id = new mongoose.Types.ObjectId(item.productId).toString();
-      const quantity = (quantities.get(id) || 0) + item.quantity;
+      const productId = new mongoose.Types.ObjectId(
+        item.productId
+      ).toString();
+
+      const quantity =
+        (quantities.get(productId) || 0) + item.quantity;
 
       if (quantity > 100) {
         return NextResponse.json(
@@ -97,7 +103,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      quantities.set(id, quantity);
+      quantities.set(productId, quantity);
     }
 
     session = await mongoose.startSession();
@@ -116,6 +122,7 @@ export async function POST(request: NextRequest) {
 
       let subtotal = 0;
 
+      // Check stock and reserve the requested quantity.
       for (const [productId, quantity] of quantities) {
         const product = await Product.findOneAndUpdate(
           {
@@ -145,7 +152,9 @@ export async function POST(request: NextRequest) {
           !Number.isFinite(regularPrice) ||
           regularPrice < 0
         ) {
-          throw new Error(`Invalid price for product ${productId}.`);
+          throw new Error(
+            `Invalid price for product ${productId}.`
+          );
         }
 
         const price =
@@ -168,7 +177,6 @@ export async function POST(request: NextRequest) {
       }
 
       // Temporary free-delivery rule.
-      // Add server-side PIN-code and delivery-fee validation here.
       const deliveryCharge = 0;
       const total = subtotal + deliveryCharge;
 
@@ -176,6 +184,17 @@ export async function POST(request: NextRequest) {
         throw new Error("The order total is invalid.");
       }
 
+      // Estimated delivery is at least 5 calendar days
+      // after the order is placed.
+      const orderPlacedAt = new Date();
+      const estimatedDeliveryDate = new Date(orderPlacedAt);
+
+      estimatedDeliveryDate.setDate(
+        estimatedDeliveryDate.getDate() + 5
+      );
+      estimatedDeliveryDate.setHours(23, 59, 59, 999);
+
+      // Create the order within the same transaction.
       const orders = await Order.create(
         [
           {
@@ -188,13 +207,25 @@ export async function POST(request: NextRequest) {
               state: customer.state!.trim(),
               pincode: customer.pincode!.trim(),
             },
+
             items: orderItems,
             subtotal,
             deliveryCharge,
             total,
+
             paymentMethod: "COD",
             paymentStatus: "Pending",
             status: "Placed",
+
+            estimatedDeliveryDate,
+
+            statusHistory: [
+              {
+                status: "Placed",
+                note: "Your order has been placed successfully.",
+                changedAt: orderPlacedAt,
+              },
+            ],
           },
         ],
         { session }
@@ -204,7 +235,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (!createdOrderId) {
-      throw new Error("Order creation completed without an order ID.");
+      throw new Error(
+        "Order creation completed without an order ID."
+      );
     }
 
     return NextResponse.json(
@@ -216,22 +249,28 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error: unknown) {
-    // Inspect the actual exception in Vercel Runtime Logs.
-    console.error("[POST /api/orders] Order creation failed:", error);
+    console.error(
+      "[POST /api/orders] Order creation failed:",
+      error
+    );
 
     const errorMessage =
       error instanceof Error ? error.message : "";
 
     if (
-      errorMessage.includes("unavailable or has insufficient stock")
+      errorMessage.includes(
+        "unavailable or has insufficient stock"
+      )
     ) {
       return NextResponse.json(
-        { error: "A product is unavailable or has insufficient stock." },
+        {
+          error:
+            "A product is unavailable or has insufficient stock.",
+        },
         { status: 409 }
       );
     }
 
-    // Avoid returning database internals to customers.
     return NextResponse.json(
       {
         error: "Unable to place your order. Please try again.",
@@ -243,7 +282,10 @@ export async function POST(request: NextRequest) {
       try {
         await session.endSession();
       } catch (error) {
-        console.error("[POST /api/orders] Session cleanup failed:", error);
+        console.error(
+          "[POST /api/orders] Session cleanup failed:",
+          error
+        );
       }
     }
   }

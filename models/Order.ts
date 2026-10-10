@@ -17,11 +17,46 @@ const OrderItemSchema = new Schema(
   { _id: false }
 );
 
+const OrderStatusHistorySchema = new Schema(
+  {
+    status: {
+      type: String,
+      enum: [
+        "Placed",
+        "Confirmed",
+        "Processing",
+        "Shipped",
+        "Out for Delivery",
+        "Delivered",
+        "Cancelled",
+      ],
+      required: true,
+    },
+    note: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: "",
+    },
+    changedAt: {
+      type: Date,
+      default: Date.now,
+      required: true,
+    },
+  },
+  { _id: false }
+);
+
 const OrderSchema = new Schema(
   {
     customer: {
       name: { type: String, required: true, trim: true },
-      email: { type: String, required: true, trim: true, lowercase: true },
+      email: {
+        type: String,
+        required: true,
+        trim: true,
+        lowercase: true,
+      },
       phone: { type: String, required: true, trim: true },
       address: { type: String, required: true, trim: true },
       city: { type: String, required: true, trim: true },
@@ -57,8 +92,43 @@ const OrderSchema = new Schema(
 
     status: {
       type: String,
-      enum: ["Placed", "Confirmed", "Shipped", "Delivered", "Cancelled"],
+      enum: [
+        "Placed",
+        "Confirmed",
+        "Processing",
+        "Shipped",
+        "Out for Delivery",
+        "Delivered",
+        "Cancelled",
+      ],
       default: "Placed",
+    },
+
+    estimatedDeliveryDate: {
+      type: Date,
+      required: true,
+    },
+
+    shippedAt: {
+      type: Date,
+      default: null,
+    },
+
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
+
+    adminNote: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: "",
+    },
+
+    statusHistory: {
+      type: [OrderStatusHistorySchema],
+      default: [],
     },
   },
   { timestamps: true }
