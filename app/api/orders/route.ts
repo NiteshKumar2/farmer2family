@@ -10,28 +10,51 @@ type RequestedItem = {
   quantity: number;
 };
 
+type CustomerInput = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  landmark?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  notes?: string;
+};
+
 export async function POST(request: NextRequest) {
-  const session = await mongoose.startSession();
+  let session: mongoose.ClientSession | undefined;
 
   try {
+    // Connect before creating a MongoDB session.
+    await connectDB();
+
     const body = await request.json();
-    const { customer, items } = body as {
-      customer?: Record<string, string>;
-      items?: RequestedItem[];
-    };
+
+    const customer = body.customer as CustomerInput | undefined;
+    const items = body.items as RequestedItem[] | undefined;
+    const paymentMethod = body.paymentMethod;
+
+    if (paymentMethod !== "cod") {
+      return NextResponse.json(
+        { error: "Only Cash on Delivery is currently available." },
+        { status: 400 }
+      );
+    }
 
     if (
       !customer ||
       !customer.name?.trim() ||
       !customer.email?.trim() ||
-      !customer.phone?.trim() ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email.trim()) ||
+      !/^[6-9]\d{9}$/.test(customer.phone?.trim() || "") ||
       !customer.address?.trim() ||
       !customer.city?.trim() ||
       !customer.state?.trim() ||
-      !/^\d{6}$/.test(customer.pincode || "")
+      !/^\d{6}$/.test(customer.pincode?.trim() || "")
     ) {
       return NextResponse.json(
-        { error: "Please provide all required customer details." },
+        { error: "Please provide valid customer and delivery details." },
         { status: 400 }
       );
     }
@@ -46,7 +69,9 @@ export async function POST(request: NextRequest) {
     if (
       items.some(
         (item) =>
-          !mongoose.Types.ObjectId.isValid(item.productId) ||
+          !item ||
+          typeof item.productId !== "string" ||
+          !mongoose.isValidObjectId(item.productId) ||
           !Number.isSafeInteger(item.quantity) ||
           item.quantity < 1 ||
           item.quantity > 100
@@ -58,30 +83,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Combine repeated product IDs.
     const quantities = new Map<string, number>();
 
     for (const item of items) {
-      quantities.set(
-        item.productId,
-        (quantities.get(item.productId) || 0) + item.quantity
-      );
-    }
+      const id = new mongoose.Types.ObjectId(item.productId).toString();
+      const quantity = (quantities.get(id) || 0) + item.quantity;
 
-    for (const quantity of quantities.values()) {
       if (quantity > 100) {
         return NextResponse.json(
           { error: "Maximum quantity per product is 100." },
           { status: 400 }
         );
       }
+
+      quantities.set(id, quantity);
     }
 
-    await connectDB();
+    session = await mongoose.startSession();
 
-    let createdOrder: any;
+    let createdOrderId = "";
 
     await session.withTransaction(async () => {
-      const orderItems = [];
+      const orderItems: Array<{
+        product: mongoose.Types.ObjectId;
+        name: string;
+        image: string;
+        price: number;
+        unit: string;
+        quantity: number;
+      }> = [];
+
       let subtotal = 0;
 
       for (const [productId, quantity] of quantities) {
@@ -91,8 +123,13 @@ export async function POST(request: NextRequest) {
             active: true,
             stock: { $gte: quantity },
           },
-          { $inc: { stock: -quantity } },
-          { new: true, session }
+          {
+            $inc: { stock: -quantity },
+          },
+          {
+            new: true,
+            session,
+          }
         );
 
         if (!product) {
@@ -101,12 +138,22 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        const regularPrice = Number(product.price);
+        const salePrice = Number(product.salePrice);
+
+        if (
+          !Number.isFinite(regularPrice) ||
+          regularPrice < 0
+        ) {
+          throw new Error(`Invalid price for product ${productId}.`);
+        }
+
         const price =
-          typeof product.salePrice === "number" &&
-          product.salePrice > 0 &&
-          product.salePrice < product.price
-            ? product.salePrice
-            : product.price;
+          Number.isFinite(salePrice) &&
+          salePrice > 0 &&
+          salePrice < regularPrice
+            ? salePrice
+            : regularPrice;
 
         subtotal += price * quantity;
 
@@ -120,22 +167,26 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Temporary: free delivery. Replace this with your
-      // existing server-side delivery fee calculation.
+      // Temporary free-delivery rule.
+      // Add server-side PIN-code and delivery-fee validation here.
       const deliveryCharge = 0;
       const total = subtotal + deliveryCharge;
+
+      if (!Number.isFinite(total)) {
+        throw new Error("The order total is invalid.");
+      }
 
       const orders = await Order.create(
         [
           {
             customer: {
-              name: customer.name.trim(),
-              email: customer.email.trim().toLowerCase(),
-              phone: customer.phone.trim(),
-              address: customer.address.trim(),
-              city: customer.city.trim(),
-              state: customer.state.trim(),
-              pincode: customer.pincode.trim(),
+              name: customer.name!.trim(),
+              email: customer.email!.trim().toLowerCase(),
+              phone: customer.phone!.trim(),
+              address: customer.address!.trim(),
+              city: customer.city!.trim(),
+              state: customer.state!.trim(),
+              pincode: customer.pincode!.trim(),
             },
             items: orderItems,
             subtotal,
@@ -149,33 +200,51 @@ export async function POST(request: NextRequest) {
         { session }
       );
 
-      createdOrder = orders[0];
+      createdOrderId = String(orders[0]._id);
     });
 
-    return NextResponse.json(
-      {
-        message: "Your COD order has been placed successfully.",
-        orderId: String(createdOrder._id),
-      },
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error("PLACE ORDER ERROR:", error);
-
-    const message =
-      error instanceof Error ? error.message : "Failed to place order.";
-
-    if (
-      message.includes("unavailable or has insufficient stock")
-    ) {
-      return NextResponse.json({ error: message }, { status: 409 });
+    if (!createdOrderId) {
+      throw new Error("Order creation completed without an order ID.");
     }
 
     return NextResponse.json(
-      { error: "Unable to place your order. Please try again." },
+      {
+        success: true,
+        message: "Your COD order has been placed successfully.",
+        orderId: createdOrderId,
+      },
+      { status: 201 }
+    );
+  } catch (error: unknown) {
+    // Inspect the actual exception in Vercel Runtime Logs.
+    console.error("[POST /api/orders] Order creation failed:", error);
+
+    const errorMessage =
+      error instanceof Error ? error.message : "";
+
+    if (
+      errorMessage.includes("unavailable or has insufficient stock")
+    ) {
+      return NextResponse.json(
+        { error: "A product is unavailable or has insufficient stock." },
+        { status: 409 }
+      );
+    }
+
+    // Avoid returning database internals to customers.
+    return NextResponse.json(
+      {
+        error: "Unable to place your order. Please try again.",
+      },
       { status: 500 }
     );
   } finally {
-    await session.endSession();
+    if (session) {
+      try {
+        await session.endSession();
+      } catch (error) {
+        console.error("[POST /api/orders] Session cleanup failed:", error);
+      }
+    }
   }
 }
